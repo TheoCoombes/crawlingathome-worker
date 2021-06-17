@@ -147,12 +147,12 @@ async def dl_wat(valid_data, first_sample_id):
     )
 
 
-def df_clipfilter(df):
+def df_clipfilter(df, client):
     sim_threshold = 0.3
     underaged_text = ["teen", "kid", "child", "baby"]
     import clip_filter
 
-    clip = clip_filter.CLIP()
+    clip = clip_filter.CLIP(client)
     img_embedding, similarities = clip.preprocess_images(df)
     nsfw_filters = clip.filter(img_embedding, clip.categories)
     underage_filters = clip.filter(img_embedding, clip.underaged_categories)
@@ -338,8 +338,9 @@ if __name__ == "__main__":
         dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
 
         client.log("Dropping NSFW keywords")
-        filtered_df, img_embeddings = df_clipfilter(dlparse_df)
+        filtered_df, img_embeddings = df_clipfilter(dlparse_df, client)
         filtered_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
+
         img_embeds_sampleid = {}
         for i, img_embed_it in enumerate(img_embeddings):
             dfid_index = filtered_df.at[i, "SAMPLE_ID"]

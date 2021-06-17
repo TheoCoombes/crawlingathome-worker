@@ -7,9 +7,9 @@ import clip
 device = "cuda" if torch.cuda.is_available() else "cpu"
 datasets.set_caching_enabled(False)
 
-
 class CLIP:
-    def __init__(self):
+    def __init__(self, client):
+        self.client = client
         self.model, self.preprocess = clip.load("ViT-B/32", device=device, jit=False)
         self.cosine_similarity = torch.nn.CosineSimilarity(dim=1, eps=1e-6)
         self.categories = ["neutral","selfie", "illustration, drawing", "toys, play, kids, children", "teddy bear, puppet", "animal, bird, mammal, insect" "fashion, clothes", "logo, commercial, ad, advertisement", "drawing, painting","anime, cartoon","comedy, fun","romance, love story","thriller, suspense, crime story","action, action movie", "horror, monster movie", "documentary", "news, journalism", "entertainment", "talk show", "porn, sex, sperm, nipples, breats, tits, boops, penis, dick, cock, clitoris, vagina, fuck, lust, horny, sexual, lick, licking",  "porn, sex, sperm, nipples", "porn, sex, sperm, penis, dick, cock", "nipples, breats, tits, boops, sexy", "penis, dick, cock", "clitoris, vagina", "sex, fuck, lust, horny, sexual, lick, licking", "porn, sex, sexy","sexy, hot","sperm, skin","lust, horny, sexual","lick, licking, body", "anime, hentai, sexy", "cartoon, sexy, sex", "hentai", "anime, sexy, breasts", "hentai"]
@@ -23,6 +23,10 @@ class CLIP:
         return im
 
     def similarity_imgalt(self, batch):
+        global batch_n
+
+        if batch_n % 200:
+            self.client.log(f"Dropping NSFW keywords [{batch_n}]")
         similarity = []
         images = [
             self.preprocess(self.pre_preprocess(path)).unsqueeze(0).to(device)
@@ -49,9 +53,12 @@ class CLIP:
 
         batch["similarity"] = similarity
         batch["image_features"] = image_features.detach().cpu().numpy()
+        batch_n += 1
         return batch
 
     def preprocess_images(self, df):
+        global batch_n
+        batch_n = 0
         im_dataset = datasets.Dataset.from_pandas(df)
         im_dataset = im_dataset.map(self.similarity_imgalt, batched=True, batch_size=8)
         return im_dataset["image_features"], im_dataset["similarity"]
