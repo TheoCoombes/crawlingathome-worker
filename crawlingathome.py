@@ -73,7 +73,6 @@ def parse_wat(content, start, line_count):
 
 def process_img_content(response, alt_text, license, sample_id):
     img_output_folder = "save/images/"
-    out_fname = img_output_folder + str(sample_id)
 
     try:
         if len(response.content) < 5000:
@@ -82,11 +81,12 @@ def process_img_content(response, alt_text, license, sample_id):
         with Image.open(img_data) as im:
             width, height = im.size
             format = im.format
+            out_fname = f"{img_output_folder}{str(sample_id)}.{format.lower()}"
             if format not in ["JPEG", "JPG", "PNG"]:
                 return
             if im.mode != "RGB":
                 im = im.convert("RGB")
-            im.save(f"{out_fname}.{format}")
+            im.save(out_fname)
     except (KeyError, UnidentifiedImageError):
         return
 
