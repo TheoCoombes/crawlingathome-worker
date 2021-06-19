@@ -57,6 +57,6 @@ class CLIP:
         text_features /= text_features.norm(dim=-1, keepdim=True)
 
         # cosine similarity as logits
-        logits_per_image = 100.0 * image_features @ text_features.t()
-        probs = logits_per_image.softmax(dim=-1).detach().cpu().numpy()
-        return (-probs).argsort()[:2]
+        similarity = (100.0 * image_features @ text_features.T).softmax(dim=-1)
+        values, _ = similarity[0].topk(2)
+        return values
