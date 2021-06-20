@@ -303,43 +303,16 @@ if __name__ == "__main__":
 
     while client.jobCount() > 0:
         start = time.time()
-        if os.path.exists(output_folder):
-            shutil.rmtree(output_folder)
-        if os.path.exists(".tmp"):
-            shutil.rmtree(".tmp")
-
-        os.mkdir(output_folder)
-        os.mkdir(img_output_folder)
-        os.mkdir(".tmp")
 
         client.newJob()
-        client.downloadShard()
         first_sample_id = int(client.start_id)
         last_sample_id = int(client.end_id)
         shard_of_chunk = client.shard_piece
 
         out_fname = f"FIRST_SAMPLE_ID_IN_SHARD_{str(first_sample_id)}_LAST_SAMPLE_ID_IN_SHARD_{str(last_sample_id)}_{shard_of_chunk}"
-        print(
-            f"[crawling@home] shard identification {out_fname}"
-        )  # in case test fails, we need to remove bad data
-        client.log("Processing shard")
 
-        fd = FileData("shard.wat")
-
-        if shard_of_chunk == 0:
-            start_index = fd[0]
-        if shard_of_chunk == 1:
-            start_index = fd[int(len(fd) * 0.5)]
-
-        lines = int(len(fd) * 0.5)
-
-        with open("shard.wat", "r") as infile:
-            parsed_data = parse_wat(infile, start_index, lines)
-
-        client.log("Downloading images")
-        dlparse_df = trio.run(dl_wat, parsed_data, first_sample_id)
-        dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
-
+        import pandas as pd
+        dlparse_df = pd.read_csv("save/image.csv", index_col=0).head(100)
         client.log("Dropping NSFW keywords")
         filtered_df, img_embeddings = df_clipfilter(dlparse_df)
         filtered_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
@@ -357,10 +330,7 @@ if __name__ == "__main__":
             filtered_df,
             f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
         )
-        upload_gdrive(f"{output_folder}image_embedding_dict-{out_fname}.pkl")
-        upload_gdrive(
-            f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord"
-        )
-        upload_gdrive(output_folder + out_fname + ".csv")
+
         client._markjobasdone(len(filtered_df))
         print(f"[crawling@home] jobs completed in {round(time.time() - start)} seconds")
+        break
