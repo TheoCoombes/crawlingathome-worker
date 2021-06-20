@@ -299,7 +299,7 @@ if __name__ == "__main__":
             parsed_data = parse_wat(infile, start_index, lines)
 
         client.log("Downloading images")
-        dlparse_df = trio.run(dl_wat, parsed_data, first_sample_id)
+        dlparse_df = dl_wat(parsed_data, first_sample_id)
         dlparse_df.to_csv(output_folder + out_fname + ".csv", index=False, sep="|")
 
         client.log("Dropping NSFW keywords")
