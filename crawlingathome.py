@@ -1,17 +1,15 @@
 import gc
-from io import BytesIO
 import os
 import pickle
 import shutil
 import time
-from glob import glob
-from urllib.parse import urljoin, urlparse
-from uuid import uuid1
-
-import trio
-import ujson
-from PIL import Image, ImageFile, UnidentifiedImageError
 from copy import copy
+from io import BytesIO
+from urllib.parse import urljoin
+
+import ujson
+from many_requests import ManyRequests
+from PIL import Image, ImageFile, UnidentifiedImageError
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True  # https://stackoverflow.com/a/47958486
 
@@ -93,55 +91,18 @@ def process_img_content(response, alt_text, license, sample_id):
     return [str(sample_id), out_fname, response.url, alt_text, width, height, license]
 
 
-async def request_image(datas, start_sampleid):
-    import asks
-
-    tmp_data = []
-    session = asks.Session(connections=64)
-    session.headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.1.1 Safari/605.1.15",
-        "Accept-Language": "en-US",
-        "Accept-Encoding": "gzip, deflate",
-        "Referer": "https://www.google.com/",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    }
-
-    async def _request(data, sample_id):
-        url, alt_text, license = data
-        try:
-            proces = process_img_content(
-                await session.get(url, timeout=5), alt_text, license, sample_id
-            )
-            if proces is not None:
-                tmp_data.append(proces)
-        except Exception:
-            return
-
-    async with trio.open_nursery() as n:
-        for data in datas:
-            n.start_soon(_request, data, start_sampleid)
-            start_sampleid += 1
-
-    with open(f".tmp/{uuid1()}.json", "w") as f:
-        ujson.dump(tmp_data, f)
-    gc.collect()
-    return
-
-
 async def dl_wat(valid_data, first_sample_id):
     import pandas as pd
     import tractor
 
     # Download every image available
     processed_samples = []
-    async with tractor.open_nursery() as n:
-        for i, data in enumerate(chunk_using_generators(valid_data, 65536)):
-            await n.run_in_actor(
-                request_image, datas=data, start_sampleid=i * 65536 + first_sample_id
-            )
+    responses = ManyRequests(n_workers=5, n_connections=5)(
+        method="GET", url=[data[0] for data in valid_data]
+    )
 
-    for tmpf in glob(".tmp/*.json"):
-        processed_samples.extend(ujson.load(open(tmpf)))
+    for i, (resp, data) in enumerate(zip(responses, valid_data)):
+        processed_samples.append(process_img_content(resp, data[1], data[2], i))
     return pd.DataFrame(
         processed_samples,
         columns=["SAMPLE_ID", "PATH", "URL", "TEXT", "HEIGHT", "WIDTH", "LICENSE"],
@@ -292,8 +253,8 @@ class FileData:
 if __name__ == "__main__":
     import crawlingathome_client as cah
 
-    YOUR_NICKNAME_FOR_THE_LEADERBOARD = "Wiki_live_test"
-    CRAWLINGATHOME_SERVER_URL = "http://crawlingathome.duckdns.org/"
+    YOUR_NICKNAME_FOR_THE_LEADERBOARD = "Wikipeadi"
+    CRAWLINGATHOME_SERVER_URL = "http://178.63.68.247:8181/"
 
     client = cah.init(
         url=CRAWLINGATHOME_SERVER_URL, nickname=YOUR_NICKNAME_FOR_THE_LEADERBOARD
@@ -358,10 +319,6 @@ if __name__ == "__main__":
             filtered_df,
             f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord",
         )
-        upload_gdrive(f"{output_folder}image_embedding_dict-{out_fname}.pkl")
-        upload_gdrive(
-            f"{output_folder}crawling_at_home_{out_fname}__00000-of-00001.tfrecord"
-        )
-        upload_gdrive(output_folder + out_fname + ".csv")
+
         client._markjobasdone(len(filtered_df))
         print(f"[crawling@home] jobs completed in {round(time.time() - start)} seconds")
